@@ -1,36 +1,77 @@
-import tkinter as tk
-from tkinter import filedialog
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import requests
 from io import BytesIO
-import textwrap
+from pathlib import Path
 
-# Set Charter as the default font (with fallbacks)
-# Try common Charter variants; falls back to serif if unavailable
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.serif'] = ['Charter', 'Bitstream Charter', 'XCharter', 'Georgia', 'DejaVu Serif']
-plt.rcParams['font.size'] = 10
+# Style setup per styleguide.md
+plt.rcParams.update({
+    'font.family': 'serif',
+    'font.serif': ['Charter', 'Georgia', 'DejaVu Serif', 'Times New Roman'],
+    'font.size': 11,
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+    'axes.linewidth': 0.8,
+    'axes.edgecolor': 'black',
+    'xtick.major.width': 0.8,
+    'ytick.major.width': 0.8,
+    'xtick.direction': 'out',
+    'ytick.direction': 'out',
+    'figure.facecolor': 'white',
+    'axes.facecolor': 'white',
+    'axes.grid': False,
+})
 
-def load_and_process_data(file_path):
+FILL_COLOR = '#D4C4B0'
+LINE_COLOR = 'black'
+
+# Configuration for the four papers
+PAPERS = [
+    {
+        'file': 'QuantumCompPhot.txt',
+        'title': 'Han-Sen Zhong et al.,\nQuantum computational advantage using photons',
+        'output': 'quantum-computational-photons.svg',
+    },
+    {
+        'file': 'SPDC.txt',
+        'title': 'Paul G. Kwiat et al.,\nNew High-Intensity Source of Polarization-Entangled Photon Pairs',
+        'output': 'polarization-entangled-photon-pairs.svg',
+    },
+    {
+        'file': 'QSDC.txt',
+        'title': 'G. L. Long and X. S. Liu,\nTheoretically efficient high-capacity quantum-key-distribution scheme',
+        'output': 'qsdc-quantum-key-distribution.svg',
+    },
+    {
+        'file': 'ExpQuantTel.txt',
+        'title': 'Dik Bouwmeester et al.,\nExperimental quantum teleportation',
+        'output': 'experimental-quantum-teleportation.svg',
+    },
+]
+
+# Number of countries to display (reduced for readability with flags)
+NUM_COUNTRIES = 8
+
+
+def load_and_process_data(file_path, num_countries=NUM_COUNTRIES):
     with open(file_path, 'r') as file:
         lines = file.readlines()
-    
+
     data = []
     for line in lines:
         if '\t' not in line or 'Countries/Regions' in line:
             continue
-        
+
         parts = line.strip().split('\t')
         if len(parts) >= 2:
             country = parts[0].strip()
             count = float(parts[1].strip())
             data.append((country, count))
-    
+
     df = pd.DataFrame(data, columns=['Country', 'Citations'])
-    
+
     country_mappings = {
         'PEOPLES R CHINA': 'China',
         'CHINA': 'China',
@@ -59,14 +100,16 @@ def load_and_process_data(file_path):
         'INDIA': 'India',
         'TAIWAN': 'Taiwan',
         'SAUDI ARABIA': 'Saudi Arabia',
-        'IRAN': 'Iran'
+        'IRAN': 'Iran',
+        'SCOTLAND': 'United Kingdom',
     }
-    
+
     df['Country'] = df['Country'].replace(country_mappings)
     df = df.groupby('Country')['Citations'].sum().reset_index()
-    df = df.sort_values('Citations', ascending=False).head(10)
-    
+    df = df.sort_values('Citations', ascending=False).head(num_countries)
+
     return df
+
 
 def get_country_flag(country_name):
     country_codes = {
@@ -96,131 +139,134 @@ def get_country_flag(country_name):
         'Saudi Arabia': 'sa',
         'Iran': 'ir',
     }
-    
+
     code = country_codes.get(country_name)
     if not code:
         return None
-    
+
     urls = [
-        f'https://flagsapi.com/{code.upper()}/flat/64.png',
         f'https://flagcdn.com/w80/{code.lower()}.png',
+        f'https://flagsapi.com/{code.upper()}/flat/64.png',
         f'https://raw.githubusercontent.com/hampusborgos/country-flags/main/png250px/{code.lower()}.png'
     ]
-    
+
     for url in urls:
         try:
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 img = Image.open(BytesIO(response.content))
                 return img
-        except:
+        except Exception:
             continue
-    
+
     print(f"Could not load flag for {country_name}")
     return None
 
+
 def create_plot(df, title):
-    fig, ax = plt.subplots(figsize=(10, 7))
-    
-    bar_color = '#2AF4FE'
-    edge_color = '#1AC8D0'
-    
-    bars = ax.bar(
-        range(len(df)), 
-        df['Citations'], 
-        color=bar_color,
-        edgecolor=edge_color,
-        linewidth=1.5,
-        alpha=0.75,
-        width=0.7
+    """Create a horizontal bar chart following the style guide."""
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    # Reverse order so highest is at top
+    df_plot = df.iloc[::-1].reset_index(drop=True)
+
+    y_positions = range(len(df_plot))
+
+    bars = ax.barh(
+        y_positions,
+        df_plot['Citations'],
+        color=FILL_COLOR,
+        edgecolor=LINE_COLOR,
+        linewidth=0.8,
+        height=0.7
     )
-    
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_color('#666666')
-    ax.spines['bottom'].set_color('#666666')
-    
-    ax.yaxis.grid(True, linestyle='-', alpha=0.2, color='#666666')
-    ax.set_axisbelow(True)
-    
-    ax.set_xticks(range(len(df)))
-    ax.set_xticklabels(df['Country'], rotation=45, ha='right', fontsize=10)
-    
-    wrapped_title = '\n'.join(textwrap.wrap(title, width=70))
-    ax.set_title(wrapped_title, pad=15, fontsize=11, fontweight='medium')
-    
-    ax.set_ylabel('Citations', fontsize=10)
-    ax.tick_params(axis='y', labelsize=9)
-    
-    ymax = max(df['Citations']) * 1.18
-    ax.set_ylim(0, ymax)
-    
-    flag_size = 0.065
-    vertical_offset = ymax * 0.02
-    
-    for idx, (bar, (_, row)) in enumerate(zip(bars, df.iterrows())):
+
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(df_plot['Country'], fontsize=10)
+
+    # Title: left-aligned above plot
+    ax.set_title(title, loc='left', fontsize=12, pad=10)
+
+    ax.set_xlabel('Citations', fontsize=11)
+    ax.tick_params(axis='x', labelsize=10)
+
+    # Extend x-axis for flags
+    xmax = max(df_plot['Citations']) * 1.20
+    ax.set_xlim(0, xmax)
+
+    # Add flags at the end of each bar
+    flag_width = xmax * 0.06
+    flag_offset = xmax * 0.02
+
+    for idx, (_, row) in enumerate(df_plot.iterrows()):
         flag = get_country_flag(row['Country'])
         if flag:
             flag = flag.convert('RGB')
             flag_array = np.array(flag)
-            
-            x_pos = idx
-            y_pos = bar.get_height() + vertical_offset
-            
-            data_width = np.diff(ax.get_xlim())[0] * flag_size
-            data_height = np.diff(ax.get_ylim())[0] * flag_size
-            
+
+            x_pos = row['Citations'] + flag_offset
+            y_pos = idx
+
+            # Calculate flag dimensions in data coordinates
+            aspect = flag_array.shape[1] / flag_array.shape[0]
+            data_height = 0.5
+            data_width = data_height * aspect * (ax.get_xlim()[1] - ax.get_xlim()[0]) / (ax.get_ylim()[1] - ax.get_ylim()[0] + 1) * 0.8
+
             flag_ax = ax.inset_axes([
-                x_pos - data_width/2,
-                y_pos,
+                x_pos,
+                y_pos - data_height / 2,
                 data_width,
                 data_height
             ], transform=ax.transData)
-            
+
             flag_ax.imshow(flag_array)
-            flag_ax.axis('off')
-    
+            flag_ax.set_xticks([])
+            flag_ax.set_yticks([])
+            # Add black frame around flag
+            for spine in flag_ax.spines.values():
+                spine.set_visible(True)
+                spine.set_color('black')
+                spine.set_linewidth(0.5)
+
+    # Attribution
     fig.text(0.02, 0.02, 'Markus Leipe (2025)', fontsize=8, color='#666666')
-    fig.text(0.98, 0.02, 'Data source: Web of Science', 
+    fig.text(0.98, 0.02, 'Data source: Web of Science',
              fontsize=8, ha='right', color='#666666')
-    
+
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.18, top=0.90)
-    
+    plt.subplots_adjust(bottom=0.12, top=0.88, left=0.18, right=0.88)
+
     return fig
 
+
 def main():
-    root = tk.Tk()
-    root.withdraw()
-    
-    file_path = filedialog.askopenfilename(
-        title="Select Web of Science data file",
-        filetypes=[("Text files", "*.txt")]
-    )
-    
-    if not file_path:
-        print("No file selected")
-        return
-    
-    # Prompt for title
-    title = input("Enter paper title (or press Enter for default): ").strip()
-    if not title:
-        title = "Top 10 Countries by Citations"
-    
-    df = load_and_process_data(file_path)
-    fig = create_plot(df, title)
-    
-    save_path = filedialog.asksaveasfilename(
-        defaultextension=".pdf",
-        filetypes=[("PDF files", "*.pdf"), ("PNG files", "*.png")],
-        title="Save figure as"
-    )
-    
-    if save_path:
-        fig.savefig(save_path, bbox_inches='tight', dpi=300)
-        print(f"Figure saved to {save_path}")
-    
-    plt.close()
+    script_dir = Path(__file__).parent
+
+    print("Generating citation analysis plots...")
+    print(f"Using style: fill={FILL_COLOR}, line={LINE_COLOR}")
+    print(f"Showing top {NUM_COUNTRIES} countries per paper\n")
+
+    for paper in PAPERS:
+        file_path = script_dir / paper['file']
+        output_path = script_dir / paper['output']
+
+        print(f"Processing: {paper['file']}")
+
+        if not file_path.exists():
+            print(f"  Warning: {file_path} not found, skipping")
+            continue
+
+        df = load_and_process_data(file_path)
+        fig = create_plot(df, paper['title'])
+
+        # Save as SVG (preferred per style guide)
+        fig.savefig(output_path, format='svg', bbox_inches='tight')
+        print(f"  Saved: {output_path}")
+
+        plt.close(fig)
+
+    print("\nDone! All plots generated.")
+
 
 if __name__ == "__main__":
     main()
