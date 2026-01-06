@@ -220,7 +220,13 @@ def create_plot(df, title):
             ], transform=ax.transData)
 
             flag_ax.imshow(flag_array)
-            flag_ax.axis('off')
+            flag_ax.set_xticks([])
+            flag_ax.set_yticks([])
+            # Add black frame around flag
+            for spine in flag_ax.spines.values():
+                spine.set_visible(True)
+                spine.set_color('black')
+                spine.set_linewidth(0.5)
 
     # Attribution
     fig.text(0.02, 0.02, 'Markus Leipe (2025)', fontsize=8, color='#666666')
